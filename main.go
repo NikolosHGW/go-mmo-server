@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -8,6 +9,62 @@ import (
 	"strings"
 	"time"
 )
+
+// VERSION!!!
+
+// REQUEST
+// VersionRequestPacket represents a packet of type 5000 that contains the client version
+type VersionRequestPacket struct {
+    Version uint16 // The client version
+}
+
+// ParseVersionRequestPacket parses a byte slice into a VersionRequestPacket
+func ParseVersionRequestPacket(data []byte) *VersionRequestPacket {
+    // Create a new VersionRequestPacket
+    packet := &VersionRequestPacket{}
+    // Read the version from the data
+    packet.Version = binary.LittleEndian.Uint16(data[4:6])
+    // Return the packet
+    return packet
+}
+
+// RESPONSE
+// VersionResponsePacket represents a packet of type 5001 that contains the server version
+type VersionResponsePacket struct {
+    Version uint16 // The server version
+}
+
+// GetBytes converts a VersionResponsePacket into a byte slice
+func (p *VersionResponsePacket) GetBytes() []byte {
+    // Create a byte buffer
+    buf := new(bytes.Buffer)
+    // Write the packet type
+    binary.Write(buf, binary.LittleEndian, uint16(5001))
+    // Write the packet length
+    binary.Write(buf, binary.LittleEndian, uint16(6))
+    // Write the version
+    binary.Write(buf, binary.LittleEndian, p.Version)
+    // Return the buffer bytes
+    return buf.Bytes()
+}
+
+// HandleVersionRequestPacket handles a VersionRequestPacket and sends a VersionResponsePacket to the client
+func HandleVersionRequestPacket(packet *VersionRequestPacket, conn net.Conn) {
+    // Create a version response packet with the server version
+    response := &VersionResponsePacket{ Version: packet.Version }
+    // Get the bytes of the response packet
+    data := response.GetBytes()
+    // Write the data to the connection
+    _, err := conn.Write(data)
+    if err != nil {
+        fmt.Println("Error writing data to", conn.RemoteAddr(), ":", err)
+        conn.Close()
+        return
+    }
+    // Print a message
+    fmt.Println("Sent version response to", conn.RemoteAddr(), "with version", packet.Version)
+}
+
 
 // PacketType is an enum for packet types
 type PacketType uint16
@@ -235,16 +292,45 @@ func (s *AuthServer) Start() error {
 // HandleConnection handles a connection 
 func (s *AuthServer) HandleConnection(conn net.Conn) { 
 	// Create a buffer for reading data 
-	buf := make([]byte, 64) // Read data from the connection 
-	n, err := conn.Read(buf) 
+	buf := make([]byte, 64) // Read data from the connection
+	fmt.Println("buf: ", buf)
+	n, err := conn.Read(buf)
+	fmt.Println("n: ", n)
 	if err != nil { 
 		fmt.Println("Error reading data from", conn.RemoteAddr(), ":", err)
 		conn.Close()
 
 		return 
-	} 
+	}
+	// Parse the packet type and length
+	packetType := binary.LittleEndian.Uint16(buf[:2])
+	packetLength := binary.LittleEndian.Uint16(buf[2:4])
+	// Check if the packet type is 5000
+	if packetType == 5000 {
+		// Check if the packet length is 6
+		if packetLength != 6 {
+			fmt.Println("Invalid packet length from", conn.RemoteAddr())
+			conn.Close()
+			return
+		}
+		// Parse and handle the version request packet
+		// ...
+		fmt.Println("qq!")
+	}
+	// Check if the packet type is 5100
+	if packetType == 5100 {
+		// Check if the packet length is 34
+		if packetLength != 34 {
+			fmt.Println("Invalid packet length from", conn.RemoteAddr())
+			conn.Close()
+			return
+		}
+		// Parse and handle the login request packet
+		// ...
+	}
 	// Parse the data as a login request packet 
 	packet := s.ParseLoginRequestPacket(buf[:n]) 
+	fmt.Println("packet: ", packet)
 	if packet == nil { 
 		fmt.Println("Invalid packet from", conn.RemoteAddr())
 		conn.Close()
